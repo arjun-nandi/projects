@@ -19,7 +19,6 @@ A comprehensive collection of advanced data science, machine learning, and analy
 - Python 3.8+
 - Virtual environment manager (venv, conda, or pipenv)
 - Git
-- GCP SDK (for anomaly-detection-system)
 
 ### Installation
 
@@ -40,28 +39,6 @@ A comprehensive collection of advanced data science, machine learning, and analy
    cd <project-directory>
    pip install -r requirements.txt
    ```
-
-### Project-Specific Instructions
-
-#### Anomaly Detection System
-```bash
-cd anomaly-detection-system
-pip install -r requirements.txt
-# Review DEPLOYMENT_GUIDE.md for GCP setup
-```
-
-#### Investment Strategy
-```bash
-cd investment_strategy
-python hybrid_etf_strategy_v2.py
-```
-
-#### Customer Segmentation
-```bash
-cd customer_segmentation
-python b2b_customer_sgmentation.py
-```
-
 ---
 
 ## 📊 Key Technologies & Tools
