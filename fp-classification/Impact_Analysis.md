@@ -3,73 +3,6 @@
 
 **Score-Inflation Vulnerability and Naming-Pattern Concentration in Confirmed False Positive Matches**
 
-Prepared for Leadership Review — Confirmed FP Root Cause Classification Initiative
-
-*DA Chapter | Australia Consumer Credit Segment*
-
-**Document status: DRAFT — quantification pending data access (see §8)**  
-Classification: Internal — Risk & Compliance
-
-# **Table of Contents**
-
-[Table of Contents	2](#table-of-contents)
-
-[1\. Executive Summary	3](#1.-executive-summary)
-
-[2\. How to Read This Analysis	3](#2.-how-to-read-this-analysis)
-
-[2.1 Bad cohort vs good cohort	3](#2.1-bad-cohort-vs-good-cohort)
-
-[2.2 Why a baseline population denominator is required	4](#2.2-why-a-baseline-population-denominator-is-required)
-
-[2.3 Lift, not just prevalence	4](#2.3-lift,-not-just-prevalence)
-
-[3\. Scenario 1: Absent-Field Score Inflation	4](#3.-scenario-1:-absent-field-score-inflation)
-
-[3.1 Problem definition	4](#3.1-problem-definition)
-
-[3.2 Quantified impact	4](#3.2-quantified-impact)
-
-[3.3 Why this matters	5](#3.3-why-this-matters)
-
-[3.4 Recommended next steps	5](#3.4-recommended-next-steps)
-
-[4\. Scenario 2: Naming-Pattern Concentration	5](#4.-scenario-2:-naming-pattern-concentration)
-
-[4.1 Problem definition	5](#4.1-problem-definition)
-
-[4.2 What we know so far	6](#4.2-what-we-know-so-far)
-
-[4.3 Quantified impact	6](#4.3-quantified-impact)
-
-[4.4 Why this matters	6](#4.4-why-this-matters)
-
-[4.5 Recommended next steps	7](#4.5-recommended-next-steps)
-
-[5\. Cross-Cutting Interaction Between the Two Scenarios	7](#5.-cross-cutting-interaction-between-the-two-scenarios)
-
-[6\. Additional Considerations Before Deciding Next Steps	7](#6.-additional-considerations-before-deciding-next-steps)
-
-[6.1 Remediation is not a binary choice	7](#6.1-remediation-is-not-a-binary-choice)
-
-[6.2 Interim risk while a fix is pending	8](#6.2-interim-risk-while-a-fix-is-pending)
-
-[6.3 Possible regulatory notification obligation — time-sensitive, separate from remediation timing	8](#6.3-possible-regulatory-notification-obligation-—-time-sensitive,-separate-from-remediation-timing)
-
-[6.4 The false-negative tradeoff	8](#6.4-the-false-negative-tradeoff)
-
-[6.5 Known scope is very likely a floor, not a ceiling	8](#6.5-known-scope-is-very-likely-a-floor,-not-a-ceiling)
-
-[6.6 Interaction with the planned system migration	9](#6.6-interaction-with-the-planned-system-migration)
-
-[6.7 What is actually being asked of leadership right now	9](#6.7-what-is-actually-being-asked-of-leadership-right-now)
-
-[7\. Consolidated Recommended Next Steps	9](#7.-consolidated-recommended-next-steps)
-
-[8\. Data Needed to Complete This Analysis	9](#8.-data-needed-to-complete-this-analysis)
-
-[9\. Appendix: Methodology and Tooling Reference	10](#9.-appendix:-methodology-and-tooling-reference)
-
 # **1\. Executive Summary**
 
 Two findings from the false positive root cause review generated leadership interest and are analysed in detail here:
@@ -261,7 +194,7 @@ Ordered by what unblocks the most other work, not strictly by scenario:
 
 # **8\. Data Needed to Complete This Analysis**
 
-* Full confirmed false positive population (dispute- and audit-sourced), in the schema root\_cause\_analysis.py expects — see prepare\_rca\_input.py.
+* Full confirmed false positive population (dispute- and audit-sourced)
 
 * Full confirmed correct-match population (predominantly audit-sourced) — needed to populate every “good cohort” row in this document; without it, only bad-cohort prevalence can be computed, not lift.
 
@@ -270,19 +203,3 @@ Ordered by what unblocks the most other work, not strictly by scenario:
 * Root cause classification status/output for the corrections cohort (per the RCA taxonomy) — needed to state what share of the 70% is specifically attributable to the naming-pattern vulnerability.
 
 * Confirmation of which fields (case description / outcome notes) are available and in what volume, to support the note-derived naming-pattern and Absent-field-interaction flags referenced in §5.
-
-# **9\. Appendix: Methodology and Tooling Reference**
-
-This analysis is designed to be completed directly by the existing RCA toolkit once the data in §8 is available — no new analytical build is required:
-
-* prepare\_rca\_input.py — consolidates raw match log and confirmed outcome labels into analysis-ready form.
-
-* prepare\_case\_notes.py — derives naming-pattern and other candidate flags from free-text case notes, for use as additional stratification dimensions.
-
-* root\_cause\_analysis.py — subgroup discovery, decision-tree surrogate, association rule mining, and stratified significance testing; produces the coverage/Pareto figures this document's tables are structured around.
-
-* name\_match\_bias\_test.py — validates and quantifies the naming-pattern matching correction under controlled test conditions.
-
-* production\_name\_bias\_audit.py — audits the live matching engine's real output for the same naming-pattern bias, using production data directly.
-
-* audit\_sampling.py — generates the stratified, unbiased confirmed-label samples this analysis depends on for defensible prevalence and lift figures.
