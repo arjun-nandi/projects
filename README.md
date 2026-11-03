@@ -5,11 +5,11 @@ A comprehensive collection of advanced data science, machine learning, and analy
 ## 📋 Projects Overview
 
 **False Positive Classification (fp-classification)**
-   - **Directory:** `fp-classification/`
-   - **Description:** Root cause analysis framework for identifying and classifying causes of false positive matches.
+   - **Directory:**
+   - **Description:**
    - **Tech Stack:** Python, Statistical Analysis
    - **Key Files:**
-     - `root_cause_analysis.py` - Main analysis pipeline
+     - 
 
 ---
 
