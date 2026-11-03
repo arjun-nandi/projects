@@ -1,59 +1,149 @@
 from pathlib import Path
 import geopandas as gpd
+import pandas as pd
 
 
-def optimize_boundaries(
-    input_shp: str, output_path: str, tolerance: float = 0.0001, state_filter: str = None
-):
-    """
-    Simplifies and shrinks ABS Shapefiles into demo-ready spatial files.
-    
-    Parameters:
-    - input_shp: Path to the raw ABS Mesh Block shapefile (.shp)
-    - output_path: Path to save the optimized file (.geojson or .parquet)
-    - tolerance: Degree of simplification. 0.0001 preserves suburb edges perfectly 
-                 while stripping out thousands of redundant coordinate points.
-    - state_filter: e.g., 'Victoria' or 'New South Wales' to drop unneeded states.
-    """
-    print("⏳ Loading raw ABS boundaries...")
-    gdf = gpd.read_file(input_shp)
+class ABSDataPipeline:
 
-    # 1. State Filter (Massive file size reduction if your demo focuses on one region)
-    if state_filter and "STE_NAME21" in gdf.columns:
-        print(f"✂️ Filtering boundaries to: {state_filter}")
-        gdf = gdf[gdf["STE_NAME21"].str.upper() == state_filter.upper()]
+    def __init__(self, mb_shp_path: str, user_data_path: str):
+        """Initialise pipeline with paths to ABS Shapefile and your dataset."""
+        self.mb_shp_path = Path(mb_shp_path)
+        self.user_data_path = Path(user_data_path)
+        self.mb_gdf = None
+        self.user_data = None
 
-    # 2. Select minimal required attribute matrix
-    columns_to_keep = ["MB_CODE21", "SA2_CODE21", "SA2_NAME21", "geometry"]
-    gdf = gdf[[c for c in columns_to_keep if c in gdf.columns]]
+    def load_abs_boundaries(self):
+        """Loads the ABS Mesh Block Shapefile and keeps only necessary mapping columns."""
+        print("⏳ Loading ABS Mesh Block Shapefile (this might take a moment)...")
+        # Read shapefile (ABS files use EPSG:7844 for GDA2020)
+        gdf = gpd.read_file(self.mb_shp_path)
 
-    # 3. Simplify Geometries (Reduces vertex count drastically)
-    print(f"⚡ Simplifying geometry loops (Tolerance: {tolerance})...")
-    gdf["geometry"] = gdf["geometry"].simplify(tolerance=tolerance, preserve_topology=True)
+        # Standardise and rename key structural columns for clarity
+        # Note: ABS shapefile fields are usually truncated (e.g., MB_CODE21, SA2_CODE21)
+        columns_to_keep = {
+            "MB_CODE21": "mesh_block_code",
+            "MB_CAT21": "mesh_block_category",
+            "SA1_CODE21": "sa1_code",
+            "SA2_CODE21": "sa2_code",
+            "SA2_NAME21": "sa2_name",
+            "STE_NAME21": "state_name",
+            "geometry": "geometry",
+        }
 
-    # 4. Save to a high-speed format
-    out = Path(output_path)
-    print(f"💾 Saving optimized file to {out.name}...")
-    
-    if out.suffix.lower() == ".parquet":
-        # Parquet is incredibly fast for loading spatial tables into memory
-        gdf.to_parquet(out)
-    else:
-        # GeoJSON is perfect if you are feeding data directly to leafmap, folium, or Mapbox
-        gdf.to_file(out, driver="GeoJSON")
+        # Filter out columns that might not exist depending on the state vs national zip
+        existing_cols = {k: v for k, v in columns_to_keep.items() if k in gdf.columns}
+        self.mb_gdf = gdf[list(existing_cols.keys())].rename(
+            columns=existing_cols
+        )
+        print(
+            f"✅ ABS Boundaries loaded successfully. Shape: {self.mb_gdf.shape}"
+        )
+        return self
 
-    print(f"🎉 Optimization Complete! Output file size: {out.stat().st_size / (1024*1024):.2f} MB")
+    def load_user_data(self, id_col=None, lat_col=None, lon_col=None):
+        """Loads your custom dataset (supports CSV, Parquet, or Excel)."""
+        print(f"⏳ Loading user data from {self.user_data_path.name}...")
+
+        suffix = self.user_data_path.suffix.lower()
+        if suffix == ".csv":
+            df = pd.read_csv(self.user_data_path)
+        elif suffix == ".parquet":
+            df = pd.read_parquet(self.user_data_path)
+        elif suffix in [".xlsx", ".xls"]:
+            df = pd.read_excel(self.user_data_path)
+        else:
+            raise ValueError(f"Unsupported file format: {suffix}")
+
+        # Ensure geometric coordinates are treated as floats if doing a spatial join
+        if lat_col and lon_col:
+            df[lat_col] = pd.to_numeric(df[lat_col], errors="coerce")
+            df[lon_col] = pd.to_numeric(df[lon_col], errors="coerce")
+            # Drop entries missing spatial data
+            df = df.dropna(subset=[lat_col, lon_col])
+
+        self.user_data = df
+        print(f"✅ User data loaded successfully. Shape: {self.user_data.shape}")
+        return self
+
+    def map_via_tabular_join(self, user_join_col: str, abs_target_col: str):
+        """Scenario A: Merges data if your table already contains an explicit MB or SA2 code."""
+        if self.mb_gdf is None or self.user_data is None:
+            raise ValueError("Pipeline steps out of order. Load datasets first.")
+
+        print(f"🔗 Executing Tabular Join on '{user_join_col}'...")
+
+        # Ensure data types match (ABS codes are strings to preserve leading zeros)
+        self.user_data[user_join_col] = (
+            self.user_data[user_join_col].astype(str).str.strip()
+        )
+
+        # Drop spatial geometry from ABS if you purely want a flat text breakdown
+        abs_flat = pd.DataFrame(self.mb_gdf.drop(columns="geometry"))
+
+        # Eliminate duplicates if matching at an SA2 level to avoid many-to-many explosions
+        if abs_target_col == "sa2_code":
+            abs_flat = abs_flat[
+                ["sa2_code", "sa2_name", "state_name"]
+            ].drop_duplicates()
+
+        mapped_df = pd.merge(
+            self.user_data,
+            abs_flat,
+            left_on=user_join_col,
+            right_on=abs_target_col,
+            how="left",
+        )
+        return mapped_df
+
+    def map_via_spatial_join(self, lat_col: str, lon_col: str):
+        """Scenario B: Point-in-polygon mapping if your data only has Lat/Lon coordinates."""
+        if self.mb_gdf is None or self.user_data is None:
+            raise ValueError("Pipeline steps out of order. Load datasets first.")
+
+        print("📍 Converting user coordinates to spatial points...")
+        # Convert flat user data to a GeoDataFrame using GDA2020 (EPSG:7844) coordinates
+        user_gdf = gpd.GeoDataFrame(
+            self.user_data,
+            geometry=gpd.points_from_xy(
+                self.user_data[lon_col], self.user_data[lat_col]
+            ),
+            crs="EPSG:7844",
+        )
+
+        print("🗺️ Performing Spatial Join (Point-in-Polygon validation)...")
+        # op='within' checks which Mesh Block polygon wraps perfectly around each point
+        mapped_gdf = gpd.sjoin(user_gdf, self.mb_gdf, how="left", predicate="within")
+
+        # Clean up spatial index fields generated by geopandas
+        if "index_right" in mapped_gdf.columns:
+            mapped_gdf = mapped_gdf.drop(columns="index_right")
+
+        return mapped_gdf
 
 
 # ==========================================
-# Run Once Before Demo
+# 🚀 PIPELINE EXECUTION EXAMPLE
 # ==========================================
 if __name__ == "__main__":
-    # Example: Creating a lightweight file for Victoria
-    optimize_boundaries(
-        input_shp="MB_2021_AUST_GDA2020.shp",
-        output_path="sa2_simplified.geojson", # Or use .parquet for pure Python speed
-        tolerance=0.0001,
-        state_filter="Victoria" 
+    # Define file local environments
+    ABS_SHAPEFILE = "path/to/MB_2021_AUST_GDA2020.shp"
+    USER_DATASET = "path/to/your_data.csv"
+
+    # Initialize
+    pipeline = ABSDataPipeline(
+        mb_shp_path=ABS_SHAPEFILE, user_data_path=USER_DATASET
     )
-  
+
+    # --- SCENARIO A: Your data has coordinate columns (Lat/Lon) ---
+    # 1. Spin up inputs
+    pipeline.load_abs_boundaries().load_user_data(lat_col="latitude", lon_col="longitude")
+    
+    # 2. Extract ASGS records spatially
+    final_spatial_output = pipeline.map_via_spatial_join(lat_col="latitude", lon_col="longitude")
+    final_spatial_output.to_csv("mapped_spatial_output.csv", index=False)
+
+    # --- SCENARIO B: Your data already has a Mesh Block code column ---
+    # pipeline.load_abs_boundaries().load_user_data()
+    # final_tabular_output = pipeline.map_via_tabular_join(user_join_col="my_mb_id", abs_target_col="mesh_block_code")
+    # final_tabular_output.to_csv("mapped_tabular_output.csv", index=False)
+    
