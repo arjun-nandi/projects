@@ -4,7 +4,7 @@ A comprehensive collection of advanced data science, machine learning, and analy
 
 ## 📋 Projects Overview
 
-**False Positive Classification (fp-classification)**
+**Classification ()**
    - **Directory:**
    - **Description:**
    - **Tech Stack:** Python, Statistical Analysis
